@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <atomic>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
@@ -46,6 +47,32 @@ namespace trinity::game
         void*           g_equipTarget = nullptr;
         DyeApplyBatch_t g_dyeApply    = nullptr;
         DyeUpsert_t     g_dyeUpsert   = nullptr;
+
+        void DyeWatchFile(const char* fmt, ...)
+        {
+            char dir[MAX_PATH]{};
+            HMODULE self = nullptr;
+            GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCSTR>(&DyeWatchFile), &self);
+            if (!self || !GetModuleFileNameA(self, dir, MAX_PATH)) return;
+            char* slash = strrchr(dir, '\\');
+            if (!slash) return;
+            snprintf(slash + 1, static_cast<size_t>(dir + MAX_PATH - slash - 1),
+                     "Trinity_DyeWatch.txt");
+            FILE* f = fopen(dir, "a");
+            if (!f) return;
+            SYSTEMTIME st{};
+            GetLocalTime(&st);
+            fprintf(f, "%02u:%02u:%02u ", st.wHour, st.wMinute, st.wSecond);
+            va_list ap;
+            va_start(ap, fmt);
+            vfprintf(f, fmt, ap);
+            va_end(ap);
+            fputc('\n', f);
+            fflush(f);
+            fclose(f);
+        }
 
         // The hook's captured component - a FALLBACK only (see ClientComp).
         // The hook fires for every equip batch the engine runs, in either
@@ -103,6 +130,57 @@ namespace trinity::game
         uintptr_t ServerComp()
         {
             return CompForCharacter(Inventory::ServerCharacterAddr());
+        }
+
+        // Read-only 1.17 component-chain diagnostic. Besides reporting the
+        // legacy walk, inspect a small pointer-aligned window in the actor's
+        // sub-object. A candidate is only reported when its +8 owner points
+        // back to the actor, which keeps the scan narrow and self-validating.
+        void ReportComponentChain(const char* realm, uintptr_t actor)
+        {
+            uintptr_t sub = 0, legacyComp = 0, legacyOwner = 0;
+            const bool subOk = actor >= kMinPointer &&
+                ReadPtr(actor + kOff_Container_Sub, &sub) && sub >= kMinPointer;
+            const bool compOk = subOk &&
+                ReadPtr(sub + kOff_Sub_EquipComp, &legacyComp) && legacyComp >= kMinPointer;
+            const bool ownerOk = compOk &&
+                ReadPtr(legacyComp + kOff_EquipComp_Owner, &legacyOwner);
+
+            DyeWatchFile("chain realm=%s actor=%p subOk=%u sub=%p legacyOff=0x%llX compOk=%u comp=%p ownerOk=%u owner=%p valid=%u hooked=%p",
+                realm, reinterpret_cast<void*>(actor), subOk ? 1u : 0u,
+                reinterpret_cast<void*>(sub),
+                static_cast<unsigned long long>(kOff_Sub_EquipComp), compOk ? 1u : 0u,
+                reinterpret_cast<void*>(legacyComp), ownerOk ? 1u : 0u,
+                reinterpret_cast<void*>(legacyOwner), CompValid(legacyComp) ? 1u : 0u,
+                reinterpret_cast<void*>(g_comp.load(std::memory_order_acquire)));
+
+            if (!subOk) return;
+            for (uintptr_t subOff = 0; subOff <= 0x100; subOff += sizeof(uintptr_t))
+            {
+                uintptr_t candidate = 0, owner = 0;
+                if (!ReadPtr(sub + subOff, &candidate) || candidate < kMinPointer) continue;
+                if (!ReadPtr(candidate + kOff_EquipComp_Owner, &owner) || owner != actor) continue;
+
+                bool foundTable = false;
+                for (uintptr_t tableOff = 0x70; tableOff <= 0xA0; tableOff += sizeof(uintptr_t))
+                {
+                    uintptr_t desc = 0, array = 0;
+                    uint32_t count = 0;
+                    if (!ReadPtr(candidate + tableOff, &desc) || desc < kMinPointer) continue;
+                    if (!ReadPtr(desc + kOff_EquipTable_Array, &array) || array < kMinPointer) continue;
+                    if (!Read32(desc + kOff_EquipTable_Count, &count) || count == 0 || count > 64) continue;
+                    DyeWatchFile("candidate realm=%s subOff=0x%llX comp=%p owner=%p tableOff=0x%llX desc=%p array=%p count=%u",
+                        realm, static_cast<unsigned long long>(subOff),
+                        reinterpret_cast<void*>(candidate), reinterpret_cast<void*>(owner),
+                        static_cast<unsigned long long>(tableOff), reinterpret_cast<void*>(desc),
+                        reinterpret_cast<void*>(array), count);
+                    foundTable = true;
+                }
+                if (!foundTable)
+                    DyeWatchFile("candidate realm=%s subOff=0x%llX comp=%p owner=%p table=not-found",
+                        realm, static_cast<unsigned long long>(subOff),
+                        reinterpret_cast<void*>(candidate), reinterpret_cast<void*>(owner));
+            }
         }
 
         void* __fastcall hkEquipBatch(void* a1, void* a2, void* a3, void* a4)
@@ -242,6 +320,13 @@ namespace trinity::game
         bool MirrorToServer(uint16_t tag, int64_t instId,
                             const uint8_t recs[kDye_MaxChannels][16], uint32_t mask)
         {
+            // 1.17's upsert primitive has not been re-derived yet. Never reset
+            // the durable record count unless the rebuilding primitive exists.
+            if (!g_dyeUpsert)
+            {
+                LOG_WARN("dye: visual test only - durable upsert unresolved; server entry untouched.");
+                return false;
+            }
             const uintptr_t comp = ServerComp();
             if (!comp)
             {
@@ -519,10 +604,22 @@ namespace trinity::game
 
     bool Dye::Install()
     {
-        const uintptr_t apply = mem::FindPattern(kSig_DyeApplyBatch);
+        // Capture the live equip component even when the stale apply signature
+        // fails. The 1.17 dye-watch build needs its equipped-entry addresses
+        // for read-only change detection and later hardware watchpoints.
+        if (!mem::InstallHook("dye: equip-batch", kSig_EquipBatch,
+                              "dye watch disabled (no component capture)",
+                              &hkEquipBatch, &oEquipBatch, &g_equipTarget))
+            return false;
+
+        uintptr_t apply = mem::FindPattern(kSig_DyeApplyBatch);
         if (!apply)
         {
-            LOG_ERR("dye: apply-batch signature NOT FOUND - armor dyeing disabled.");
+            apply = mem::FindPattern(kSig_DyeApplyBatch117Candidate);
+        }
+        if (!apply)
+        {
+            LOG_ERR("dye: 1.17 apply function not found - applying disabled.");
             return false;
         }
         g_dyeApply = reinterpret_cast<DyeApplyBatch_t>(apply);
@@ -530,15 +627,12 @@ namespace trinity::game
         const uintptr_t upsert = mem::FindPattern(kSig_DyeUpsert);
         if (!upsert)
             LOG_WARN("dye: upsert signature not found - dye will apply but not persist.");
-        g_dyeUpsert = reinterpret_cast<DyeUpsert_t>(upsert);
-
-        if (!mem::InstallHook("dye: equip-batch", kSig_EquipBatch,
-                              "armor dyeing disabled (no component capture)",
-                              &hkEquipBatch, &oEquipBatch, &g_equipTarget))
+        else
         {
-            g_dyeApply = nullptr;
-            return false;
+            LOG("dye: 1.17 apply @ %p, durable upsert @ %p.",
+                reinterpret_cast<void*>(apply), reinterpret_cast<void*>(upsert));
         }
+        g_dyeUpsert = reinterpret_cast<DyeUpsert_t>(upsert);
 
         return true;
     }
@@ -554,7 +648,10 @@ namespace trinity::game
 
     bool Dye::Ready()
     {
-        return g_dyeApply != nullptr && ClientComp() != 0;
+        // Slot browsing only needs a valid component. The 1.17 apply entry
+        // point is resolved separately; ProcessRequest refuses safely while
+        // it is unavailable.
+        return ClientComp() != 0;
     }
 
     int Dye::SlotCount()
@@ -624,6 +721,109 @@ namespace trinity::game
 
     void Dye::Tick()
     {
+        // One-time raw field map for entries that claim existing dye records.
+        // This locates the 1.17 vector pointer without interpreting or writing.
+        static bool vectorDumped = true; // diagnostic completed in 0.13.39
+        if (!vectorDumped)
+        {
+            const uintptr_t dumpComp = ClientComp();
+            uintptr_t dumpDesc = 0, dumpArray = 0;
+            uint32_t dumpCount = 0;
+            if (dumpComp && ReadPtr(dumpComp + kOff_EquipComp_Table, &dumpDesc) &&
+                ReadPtr(dumpDesc + kOff_EquipTable_Array, &dumpArray) &&
+                Read32(dumpDesc + kOff_EquipTable_Count, &dumpCount) && dumpCount <= 64)
+            {
+                for (uint32_t i = 0; i < dumpCount; ++i)
+                {
+                    const uintptr_t e = dumpArray + static_cast<uintptr_t>(i) * kEquipEntry_Stride;
+                    uint16_t tag = 0, type = 0;
+                    Read16(e + kOff_EquipEntry_SlotTag, &tag);
+                    if (tag != 16) continue;
+                    uint32_t oldCount = 0;
+                    Read32(e + kOff_ItemVal_DyeCount, &oldCount);
+                    Read16(e + kOff_InvSlot_TypeId, &type);
+                    DyeWatchFile("vector-map begin entry=%p index=%u tag=%u type=%u oldCount=%u",
+                        reinterpret_cast<void*>(e), i, tag, type, oldCount);
+                    for (uintptr_t off = 0x40; off <= 0xC8; off += 8)
+                    {
+                        uintptr_t q = 0;
+                        uint32_t lo = 0, hi = 0;
+                        ReadPtr(e + off, &q); Read32(e + off, &lo); Read32(e + off + 4, &hi);
+                        DyeWatchFile("vector-map off=0x%02llX q=%p lo=%u hi=%u",
+                            static_cast<unsigned long long>(off), reinterpret_cast<void*>(q), lo, hi);
+                    }
+                    vectorDumped = true;
+                    break;
+                }
+            }
+        }
+
+        static ULONGLONG lastChain = 0;
+        const ULONGLONG chainNow = GetTickCount64();
+        if (false && chainNow - lastChain >= 2000)
+        {
+            lastChain = chainNow;
+            ReportComponentChain("client", Inventory::ClientCharacterAddr());
+            ReportComponentChain("server", Inventory::ServerCharacterAddr());
+        }
+
+        // Read-only dye watch. Log equipped entry/vector addresses and any
+        // record-vector change made by the game's normal dye interface.
+        static ULONGLONG last = 0;
+        static uintptr_t oldData[64]{};
+        static uint32_t oldCount[64]{};
+        static uint64_t oldHash[64]{};
+        static bool seen[64]{};
+        const ULONGLONG now = GetTickCount64();
+        if (false && now - last >= 500)
+        {
+            last = now;
+            const uintptr_t comp = ClientComp();
+            uintptr_t desc = 0, array = 0;
+            uint32_t count = 0;
+            if (comp && ReadPtr(comp + kOff_EquipComp_Table, &desc) &&
+                ReadPtr(desc + kOff_EquipTable_Array, &array) &&
+                Read32(desc + kOff_EquipTable_Count, &count) && count <= 64)
+            {
+                for (uint32_t i = 0; i < count; ++i)
+                {
+                    const uintptr_t entry = array + static_cast<uintptr_t>(i) * kEquipEntry_Stride;
+                    uint16_t tag = 0, tid = 0;
+                    uintptr_t data = 0;
+                    uint32_t dyeCount = 0;
+                    Read16(entry + kOff_EquipEntry_SlotTag, &tag);
+                    Read16(entry + kOff_InvSlot_TypeId, &tid);
+                    ReadPtr(entry + kOff_ItemVal_DyeData, &data);
+                    Read32(entry + kOff_ItemVal_DyeCount, &dyeCount);
+                    if (dyeCount > kDye_MaxChannels) dyeCount = kDye_MaxChannels;
+                    uint64_t hash = 1469598103934665603ull;
+                    if (data >= kMinPointer)
+                        for (uint32_t b = 0; b < dyeCount * 16; ++b)
+                        {
+                            uint8_t v = 0;
+                            if (!Read8(data + b, &v)) break;
+                            hash = (hash ^ v) * 1099511628211ull;
+                        }
+                    if (!seen[i] || oldData[i] != data || oldCount[i] != dyeCount || oldHash[i] != hash)
+                    {
+                        LOG("dye-watch: comp=%p entry=%p index=%u tag=%u type=%u data=%p count=%u hash=%016llX countAddr=%p.",
+                            reinterpret_cast<void*>(comp), reinterpret_cast<void*>(entry), i,
+                            tag, tid, reinterpret_cast<void*>(data), dyeCount,
+                            static_cast<unsigned long long>(hash),
+                            reinterpret_cast<void*>(entry + kOff_ItemVal_DyeCount));
+                        DyeWatchFile("comp=%p entry=%p index=%u tag=%u type=%u data=%p count=%u hash=%016llX countAddr=%p",
+                            reinterpret_cast<void*>(comp), reinterpret_cast<void*>(entry), i,
+                            tag, tid, reinterpret_cast<void*>(data), dyeCount,
+                            static_cast<unsigned long long>(hash),
+                            reinterpret_cast<void*>(entry + kOff_ItemVal_DyeCount));
+                        seen[i] = true;
+                        oldData[i] = data;
+                        oldCount[i] = dyeCount;
+                        oldHash[i] = hash;
+                    }
+                }
+            }
+        }
         if (g_state.load(std::memory_order_acquire) == static_cast<int>(OpState::Pending))
             ProcessRequest();
     }

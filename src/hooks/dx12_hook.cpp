@@ -532,7 +532,7 @@ namespace trinity::hooks
         // We only get here in the process that actually presents - open the
         // console now and flush the buffered startup logs into it, and claim
         // Trinity.ini so the launcher's copy of the ASI can never save over us.
-        Logger::EnableConsole();
+        Logger::EnableConsole(State::Get().fileLogging);
         Settings::ClaimOwnership();
 
         if (FAILED(swapChain->GetDevice(IID_PPV_ARGS(&g_device))))

@@ -213,6 +213,12 @@ namespace trinity::game
                 LOG_WARN("world: TOD engine-global signature NOT FOUND - sun freeze disabled.");
                 ok = false;
             }
+            else if (mem::CountMatches(kSig_TodEngineGlobal, 2) != 1)
+            {
+                LOG_WARN("world: TOD engine-global signature ambiguous - sun freeze disabled.");
+                g_todEngineGlobal = 0;
+                ok = false;
+            }
             else
             {
                 g_todEngineGlobal = mem::ResolveRipAt(g + kOff_TodEngineGlobal_Mov,

@@ -15,7 +15,9 @@
 // Engine: Pearl Abyss custom engine ("pa::" namespace). RTTI is intact, so
 // class/reflection names are durable anchors across updates.
 //
-// The stat model below was derived and validated against THIS game build in
+// The stat model below was originally derived against the pre-1.17 game build and
+// re-validated where noted against Crimson Desert 1.17.00 (EXE SHA-256
+// A1DFC0329E177240A978EE4CC3D331E5DDD1903D1055787816199C559E16857C) in
 // IDA (every signature here is a confirmed unique match).
 // ---------------------------------------------------------------------------
 
@@ -101,6 +103,12 @@ namespace trinity::game
         // never moves on screen; the displayed 0-30 pool (confirmed against the
         // in-game stat screen) is this type instead. Same trap as Stamina above.
         StatType_SpiritPool = 21,
+        // Live 1.17 capture (0.13.26): these are the authoritative gameplay
+        // pools. Type 22 at slot 12 fell from 320000 while sprinting; type 23
+        // at slot 13 fell from 110000 while spending spirit. The older 17/18
+        // entries remain full and are internal/secondary gauges on this build.
+        StatType_StaminaPool117 = 22,
+        StatType_SpiritPool117  = 23,
     };
     // NOTE (movement speed): the player stat array also carries two "rate"
     // entries (type 30 and type 74) that rest at 100000 == 1.0x, but writing
@@ -213,9 +221,9 @@ namespace trinity::game
         // sub_251E3B0: mov r8d,[rdx+90h] / lea rdx,[rsp+..] / mov rcx,[rax] / call.
         // rdx is the incoming arg2 at entry; 0x90 is a struct offset.
         {"48 8B 05 ?? ?? ?? ?? 44 8B 82 90 00 00 00 48 8D 54 24 ?? 48 8B 08 E8", 0},
-        // sub_251D530: mov r8d,[rcx+160h] / lea rdx,[rbp+..] / mov rcx,[rax] / call.
-        // rcx is the incoming arg1 at entry; 0x160 is a struct offset.
-        {"48 8B 05 ?? ?? ?? ?? 44 8B 81 60 01 00 00 48 8D 55 ?? 48 8B 08 E8", 0},
+        // 1.17: this caller now reads +0x158 (was +0x160) before the same manager call.
+        // rcx is the incoming arg1 at entry; the literal field offset is part of the anchor.
+        {"48 8B 05 ?? ?? ?? ?? 44 8B 81 58 01 00 00 48 8D 55 ?? 48 8B 08 E8", 0},
         // sub_2514EB0 / sub_22EBC00: mov r8d,[rdi] / lea rdx,[rsp+..] / mov rcx,[rax] / call.
         // Weakest of the set (rdi is allocator-chosen) and it matches BOTH of
         // those sites - but both resolve to the same global, so it still votes
@@ -458,7 +466,7 @@ namespace trinity::game
     inline constexpr const char* kStr_LevelNameTable = "FieldLevelNameTableInfo";
     inline constexpr const char* kSig_LeaR8Rip       = "4C 8D 05 ?? ?? ?? ??";
     inline constexpr const char* kSig_TableResolverPrologue =
-        "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 40 8B 39 48 8B 1D";
+        "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 50 8B 39 48 8B 1D";
     // Within the prologue: +0x12 is `mov edi,[rcx]`, +0x14 the 7-byte
     // `mov rbx, cs:<registry global>` whose RIP operand we resolve.
     inline constexpr uintptr_t kOff_TableResolver_MovGlobal = 0x14;
@@ -558,10 +566,11 @@ namespace trinity::game
     // empty). Editing a quantity in the client holder alone reverts because a
     // per-frame server reconcile overwrites it; writing the SAME slot in BOTH
     // holders makes the edit real, usable, and non-reverting (live-proven).
-    // Unique byte signature.
+    // 1.17: frame grew from 0x2F0 to 0x310; the surrounding ABI saves stayed stable.
+    // Unique byte signature in the 1.17 scan.
     inline constexpr const char* kSig_InvHolderInsert =
         "48 89 5C 24 ? 4C 89 44 24 ? 48 89 54 24 ? 48 89 4C 24 ? 55 56 57 41 54 "
-        "41 55 41 56 41 57 48 8D AC 24 ? ? ? ? 48 81 EC F0 02 00 00";
+        "41 55 41 56 41 57 48 8D AC 24 ? ? ? ? 48 81 EC 10 03 00 00";
 
     // Inventory transaction COMMIT (IDB sub_1CE1E70), called by the transaction
     // orchestrator sub_1CC15C0 as `commit(holder, &err, CONTAINER, ...)` - its
@@ -772,7 +781,7 @@ namespace trinity::game
     // def alone. Leaves the instance id as -1 for the caller to stamp.
     inline constexpr const char* kSig_TrItemValueCtor =
         "48 89 5C 24 ? 48 89 4C 24 ? 55 56 57 41 54 41 55 41 56 41 57 48 8B EC "
-        "48 83 EC 60 4C 8B EA";
+        "48 83 EC 60 4C 8B EA 48 8B F1 48 C7 01 FF FF FF FF 0F B7 02 66 89 41 08";
     // Per-placement COMMIT (IDB sub_1CE1020):
     //     void* f(holder, int* outErr, void* unused, void* placement, u16 slotIdx)
     // Re-finds the bucket from the item's own def (+66) and calls sub_ED65670,
@@ -782,23 +791,31 @@ namespace trinity::game
     // scratch whose low word is immediately overwritten with the typeId.
     inline constexpr const char* kSig_InvCommitPlacement =
         "48 89 5C 24 ? 4C 89 44 24 ? 55 56 57 48 83 EC 30 41 0F B7 59";
-    // Free the planner's placement vector (IDB sub_7D13B10, reached via the
-    // 5-byte jmp thunk sub_332C40 - thunks cannot be signatured, so this is the
-    // target; calling it is identical). Its `imul rcx, rax, 0D8h` in the
-    // signature below IS the 216-byte placement stride - a nice self-check.
+    // Free the planner's placement vector. The pre-1.17 build reached the
+    // cleanup target through a 5-byte jmp thunk; 1.17 recompiles the target but
+    // keeps the same vector ABI: [vec+0] data, [vec+8] count, [vec+10h] inline
+    // storage sentinel, with 0xD8-byte placement records. The 1.17 target first
+    // destroys [data, data + count*0xD8), then releases the backing allocation.
+    // Re-derived against CrimsonDesert.exe SHA256
+    // A1DFC0329E177240A978EE4CC3D331E5DDD1903D1055787816199C559E16857C.
+    // The signature was unique in that build; Inventory::Install also re-checks
+    // uniqueness before enabling Add Item.
     inline constexpr const char* kSig_InvFreePlacements =
-        "48 89 5C 24 ? 57 48 83 EC 20 48 89 CB 48 8B 09 48 85 C9 74 ? 31 FF 39 7B "
-        "? 76 ? 0F 1F 40 ? 89 F8 48 69 C8 D8 00 00 00";
+        "48 89 4C 24 08 53 48 83 EC 20 48 8B D9 48 8B 09 8B 43 08 "
+        "48 69 D0 D8 00 00 00 48 03 D1 E8 ? ? ? ? 90 48 8B 0B "
+        "48 8D 43 10 48 3B C8";
     // TrItemValue dtor (IDB sub_ED6DF40, via thunk sub_1F88270). Destroys the
     // sub-objects the ctor allocated; does NOT free the buffer itself.
     inline constexpr const char* kSig_TrItemValueDtor =
-        "48 89 5C 24 ? 48 89 74 24 ? 48 89 4C 24 ? 57 48 83 EC 20 48 89 CB 48 8B "
-        "89 ? ? ? ? BF 03 02 00 00 31 F6";
+        "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 48 83 EC 20 "
+        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF 03 02 00 00 31 F6";
 
     inline constexpr uintptr_t kOff_InvHolder_Container = 0x08; // holder+8 -> container
     // ItemInfo._defaultPushInventoryInfo - which storage this item goes to by
     // default. The commit re-reads it, but we need it to pick the bucket too.
-    inline constexpr uintptr_t kOff_ItemDef_BucketType  = 66;   // u16
+    // Working 0.13.2 ASI FUN_180012840 reads the holder bucket type from
+    // itemDef+0x418 before selecting the matching client/server bucket.
+    inline constexpr uintptr_t kOff_ItemDef_BucketType  = 0x418; // u16, 1.17
     //
     // ★ The inventory CONTAINER *is* the player CHARACTER object - the very same
     // "owner" the player/god-mode code resolves. Live-confirmed 2026-07-15: the
@@ -823,11 +840,17 @@ namespace trinity::game
     inline constexpr uintptr_t kOff_Sub_IdAllocator = 0x10; // (owner+0x68)+0x10 -> id allocator
     inline constexpr uintptr_t kOff_IdAlloc_Counter = 0x20; // i64, InterlockedIncrement64 target
 
-    inline constexpr uintptr_t kItemVal_Size        = 0xC0; // == kInvSlot_Stride
+    // Working 0.13.2 ASI FUN_180012540 clears 0x108 bytes before invoking the
+    // 1.17 TrItemValue constructor. This working object is larger than the
+    // live inventory-slot stride and must not be truncated to 0xC0.
+    inline constexpr uintptr_t kItemVal_Size        = 0x108;
     inline constexpr uintptr_t kOff_ItemVal_InstanceId = 0x00; // i64 (-1 out of the ctor)
     inline constexpr uintptr_t kOff_ItemVal_Subtype    = 0x0A; // u16 (reconcile zeroes it)
-    inline constexpr uintptr_t kPlacement_Stride       = 216;
-    inline constexpr uintptr_t kOff_Placement_SlotIdx  = 208;  // u16
+    // Crimson Desert 1.17 working transaction ABI, recovered from the
+    // known-good Trinity 0.13.2 ASI: records are 0xE0 bytes and the slot
+    // index consumed by CommitPlacement is the u16 at +0xD8.
+    inline constexpr uintptr_t kPlacement_Stride       = 0xE0;
+    inline constexpr uintptr_t kOff_Placement_SlotIdx  = 0xD8; // u16
 
     // --- The client/server realm flag ----------------------------------------
     // The engine runs two realms in one process and selects between them with a
@@ -855,12 +878,13 @@ namespace trinity::game
     // here differs from kSig_TableResolverPrologue only in loading a 16-bit key
     // (0F B7 39) instead of 32-bit (8B 39); the mov-global sits at +0x15.
     //   table +0x08 u32  count (typeId bound)
-    //   table +0x50 ptr  def[]      (def = *(table+0x50 + 8*typeId))
+    //   table +0x58 ptr  def[]      (def = *(table+0x58 + 8*typeId))
     //   def   +0x08 ptr -> string object whose first qword is the key char*
     inline constexpr const char* kStr_ItemInfoTable = "iteminfo";
     inline constexpr uintptr_t kOff_ItemResolver_MovGlobal = 0x15;
     inline constexpr uintptr_t kOff_ItemTable_Count = 0x08; // u32
-    inline constexpr uintptr_t kOff_ItemTable_Defs  = 0x50; // ptr[]
+    // Working 0.13.2 ASI FUN_180014390 reads this pointer at +0x58 in 1.17.
+    inline constexpr uintptr_t kOff_ItemTable_Defs  = 0x58; // ptr[]
     inline constexpr uintptr_t kOff_ItemDef_Key     = 0x08; // ptr -> string obj
 
     // --- Storages: what each bucket IS ---------------------------------------
@@ -1049,6 +1073,8 @@ namespace trinity::game
     // mapped Money_Copper to "Silver"; the game says "Copper").
     // Anchored on the getter itself: 0x22 bytes, unique, and its
     // `mov rax, cs:<locMgr>` sits at +0x03 (7-byte instruction).
+    // 1.17.00 note: this getter was recompiled and the old AOB does not resolve.
+    // Localisation is optional; inventory falls back to prettified engine keys.
     inline constexpr const char* kSig_LocStringGet =
         "8B 51 10 48 8B 05 ? ? ? ? 48 8B 48 08 3B 51 08 72 08 "
         "48 8D 05 ? ? ? ? C3 48 8B C2 48 03 01 C3";
@@ -1182,7 +1208,8 @@ namespace trinity::game
     //   cmp cs:dword_648F680, -1 ; jnz ; mov cs:qword_648F688, rbx ; mov cs:.., rdi
     // The engine global = RIP target of that first `mov cs:<g>, rbx` store.
     inline constexpr const char* kSig_TodEngineGlobal =
-        "83 3D ?? ?? ?? ?? FF 75 ?? 48 89 1D ?? ?? ?? ?? 48 89 3D";
+        "83 3D ?? ?? ?? ?? FF 75 1B 48 89 1D ?? ?? ?? ?? 48 89 3D ?? ?? ?? ?? "
+        "48 8D 0D ?? ?? ?? ?? E8";
     inline constexpr uintptr_t kOff_TodEngineGlobal_Mov = 9; // the `48 89 1D <disp32>`
     inline constexpr int       kLen_TodEngineGlobal_Mov = 7; // 3-byte opcode + disp32
     inline constexpr uintptr_t kOff_Tod_Manager     = 0x2F8; // engine -> render manager
@@ -1300,9 +1327,18 @@ namespace trinity::game
     // literal 0x120 frame + arg shuffle (mov r12,r8; mov rsi,rdx). If a patch
     // resizes the frame, re-find via xrefs to the dye upsert (kSig_DyeUpsert)
     // from a ~0x550-byte function in the equip-component code region.
+    // 1.17.00 note: this render-side applier still needs a fresh signature.
+    // Dye::Install fails closed rather than calling an unverified function.
     inline constexpr const char* kSig_DyeApplyBatch =
         "48 89 5C 24 ? 48 89 54 24 ? 55 56 57 41 54 41 55 41 56 41 57 "
         "48 8D 6C 24 ? 48 81 EC 20 01 00 00 4D 8B E0 48 8B F2";
+
+    // 1.17 read-only candidate: same saved-register set and ABI shuffle as
+    // the prior applier, but the compiler now uses a 0x50 frameless stack.
+    // Kept separate until runtime-address logging confirms one unique hit.
+    inline constexpr const char* kSig_DyeApplyBatch117Candidate =
+        "48 89 5C 24 18 48 89 54 24 10 55 56 57 41 54 41 55 41 56 41 57 "
+        "48 83 EC 50 4D 8B E0 48 8B F2 4C 8B F1";
 
     // The dye-record upsert primitive (IDB sub_1F8CB40):
     //     void f(void* itemVal, const uint8_t record[16])
@@ -1310,21 +1346,22 @@ namespace trinity::game
     // (growing the vector in the CALLING THREAD'S REALM) while count < 12.
     // Used for the inventory-instance mirror. The `49 C1 E0 04` is the
     // 16-byte record stride (shl r8,4) - semantic, keep literal.
+    // 1.17.00 note: record upsert still needs a fresh signature.
     inline constexpr const char* kSig_DyeUpsert =
-        "48 8B 41 ? 4C 8B D1 44 8B 41 ? 49 C1 E0 04";
+        "48 8B 41 78 4C 8B D1 44 8B 81 80 00 00 00 49 C1 E0 04";
 
     // Equip component layout (verified in THIS build from BatchEquip's own
     // table walk: `a1[17]` -> desc, `*(desc+8) + 200*i`, tag at +192).
-    inline constexpr uintptr_t kOff_EquipComp_Table  = 0x88; // -> table descriptor
+    inline constexpr uintptr_t kOff_EquipComp_Table  = 0x80; // 1.17 -> table descriptor (live client/server chain capture)
     inline constexpr uintptr_t kOff_EquipTable_Array = 0x08; // entry[] base
     inline constexpr uintptr_t kOff_EquipTable_Count = 0x10; // u32
-    inline constexpr uintptr_t kEquipEntry_Stride    = 0xC8; // TrItemValue + u16 tag
-    inline constexpr uintptr_t kOff_EquipEntry_SlotTag = 0xC0; // u16 (helm 3, chest 4,
+    inline constexpr uintptr_t kEquipEntry_Stride    = 0xD0; // 1.17: TrItemValue grew by 8 bytes
+    inline constexpr uintptr_t kOff_EquipEntry_SlotTag = 0xC8; // 1.17 u16 slot tag (helm 3, chest 4,
                                                                // gloves 5, boots 6, cloak 16)
     // Within an entry, the TrItemValue fields reuse kOff_ItemVal_InstanceId /
     // kOff_InvSlot_TypeId / kOff_InvSlot_Quantity above, plus:
-    inline constexpr uintptr_t kOff_ItemVal_DyeData  = 0x70; // 16-byte record[]
-    inline constexpr uintptr_t kOff_ItemVal_DyeCount = 0x78; // u32
+    inline constexpr uintptr_t kOff_ItemVal_DyeData  = 0x78; // 1.17 -> 16-byte record[]
+    inline constexpr uintptr_t kOff_ItemVal_DyeCount = 0x80; // 1.17 u32 count (capacity at +0x84)
     inline constexpr uint32_t  kDye_MaxChannels      = 12;
 
     // --- Abyss Gear sockets (live-cracked 2026-07-18; see the abyss-gear note) -
@@ -1382,6 +1419,8 @@ namespace trinity::game
     // do not rebuild it, so they did nothing on a raw write. Live trace of the
     // Witch's socketing found sub_7C88A0 as the real entry.)
     // Signature: void* f(equipComponent, int* out).
+    // 1.17.00 note: the old effect-refresh AOB no longer resolves. Socket/refine
+    // edits remain guarded and persistent; live effects may wait for a reload.
     inline constexpr const char* kSig_EquipEffectRefresh =
         "48 89 5C 24 ? 48 89 54 24 ? 48 89 4C 24 ? 55 56 57 41 54 41 55 41 56 41 57 "
         "48 8B EC 48 83 EC 60 4C 8B F2";

@@ -93,11 +93,13 @@ namespace trinity
             else if (!strcmp(key, "invStackSize"))    vals.invStackSize    = atoi(val) != 0;
             else if (!strcmp(key, "invStackSizeVal")) vals.invStackSizeVal = atoi(val);
             else if (!strcmp(key, "showFps"))       vals.showFps       = atoi(val) != 0;
+            else if (!strcmp(key, "fileLogging"))   vals.fileLogging   = atoi(val) != 0;
         }
         fclose(f);
 
         State& st  = State::Get();
         st.autoSave = vals.autoSave;
+        st.fileLogging = vals.fileLogging;
 
         // Every key/pad bind persists regardless of Auto Save - a rebind you
         // can't keep between sessions is a bug, not a "feature value". A garbled
@@ -200,7 +202,8 @@ namespace trinity
                 "invSlotSizeVal=%d\n"
                 "invStackSize=%d\n"
                 "invStackSizeVal=%d\n"
-                "showFps=%d\n",
+                "showFps=%d\n"
+                "fileLogging=%d\n",
                 st.openKeyVk,
                 st.openPadMask,
                 st.flyUpKeyVk,
@@ -228,7 +231,8 @@ namespace trinity
                 st.invSlotSizeVal,
                 st.invStackSize ? 1 : 0,
                 st.invStackSizeVal,
-                st.showFps ? 1 : 0);
+                st.showFps ? 1 : 0,
+                st.fileLogging ? 1 : 0);
         const bool ok = fflush(f) == 0;
         fclose(f);
 

@@ -113,6 +113,7 @@ namespace trinity
 
         // Overlay extras.
         bool showFps = false;
+        bool fileLogging = true; // mirror the console to Trinity.log
 
         // Persistence (settings.cpp). While on, every feature change is
         // written to Trinity.ini and restored on the next launch. The flag

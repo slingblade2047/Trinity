@@ -17,7 +17,7 @@ namespace trinity
     public:
         enum Level { Info, Good, Warn, Error };
 
-        static void EnableConsole()
+        static void EnableConsole(bool fileLogging)
         {
             std::lock_guard<std::mutex> lock(Mutex());
             if (s_console)
@@ -28,6 +28,26 @@ namespace trinity
             SetConsoleTitleA("Trinity");
             s_console = true;
 
+            HMODULE module = nullptr;
+            GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCSTR>(&EnableConsole), &module);
+            if (fileLogging && module)
+            {
+                char path[MAX_PATH]{};
+                if (GetModuleFileNameA(module, path, MAX_PATH))
+                {
+                    char* slash = strrchr(path, '\\');
+                    if (slash)
+                    {
+                        strcpy_s(slash + 1, static_cast<size_t>(path + MAX_PATH - slash - 1),
+                                 "Trinity.log");
+                        // One complete, bounded log per game session.
+                        fopen_s(&s_logFp, path, "w");
+                    }
+                }
+            }
+
             for (const auto& line : s_buffer)
                 Emit(line);
             s_buffer.clear();
@@ -37,6 +57,7 @@ namespace trinity
         {
             std::lock_guard<std::mutex> lock(Mutex());
             if (s_conFp)   { fclose(s_conFp); s_conFp = nullptr; }
+            if (s_logFp)   { fclose(s_logFp); s_logFp = nullptr; }
             if (s_console) { FreeConsole(); s_console = false; }
         }
 
@@ -93,6 +114,14 @@ namespace trinity
             std::printf("%s\n", l.text.c_str());
             SetConsoleTextAttribute(h, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
             std::fflush(stdout);
+
+            if (s_logFp)
+            {
+                static const char* names[] = { "INFO", "OK", "WARN", "ERROR" };
+                std::fprintf(s_logFp, "%s [%s] Trinity %s\n", l.stamp.c_str(), names[l.lvl],
+                             l.text.c_str());
+                std::fflush(s_logFp);
+            }
         }
 
         static std::mutex& Mutex()
@@ -102,6 +131,7 @@ namespace trinity
         }
 
         static inline FILE*            s_conFp   = nullptr;
+        static inline FILE*            s_logFp   = nullptr;
         static inline bool             s_console = false;
         static inline std::deque<Line> s_buffer;
     };

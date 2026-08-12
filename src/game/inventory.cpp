@@ -326,11 +326,107 @@ namespace trinity::game
             return true;
         }
 
+        void Prettify(const char* key, char* out, size_t n);
+
+        void CleanCategoryFallback(char* label, size_t n)
+        {
+            // The engine keys are identifiers rather than prose. Normalize
+            // their common vocabulary only when localisation is unavailable;
+            // real translated category names never pass through this function.
+            struct Rename { const char* from; const char* to; };
+            static constexpr Rename exact[] = {
+                { "Ammo",             "Ammunition" },
+                { "bag",              "Bags" },
+                { "ETC Ku Ku Pot All", "Kuku Pot (All)" },
+                { "Ku Ku Pot",        "Kuku Pot" },
+                { "ETC Lure",         "Lures" },
+                { "trade Unpack",     "Unpacked Trade Goods" },
+                { "trade Packed",     "Packed Trade Goods" },
+                { "Animal Item",      "Animal Items" },
+                { "Goods",            "Trade Goods" },
+                { "Equip Weapon One Hand",        "One-Handed Weapons" },
+                { "Equip Weapon Shield",          "Shields" },
+                { "Equip Weapon Two Hand",        "Two-Handed Weapons" },
+                { "Equip Weapon Range",           "Ranged Weapons" },
+                { "Equip Weapon One Hand Dagger", "Daggers" },
+                { "Equip Armor Player Helm",      "Helmets" },
+                { "Equip Armor Player Armor",     "Armor" },
+                { "Equip Armor Player Cloak",     "Cloaks" },
+                { "Equip Armor Player Gloves",    "Gloves" },
+                { "Equip Armor Player Boots",     "Boots" },
+                { "Equip Accessory Necklace",     "Necklaces" },
+                { "Equip Accessory Ring",         "Rings" },
+                { "Equip Accessory Glasses",      "Glasses" },
+                { "Equip Accessory Mask",         "Masks" },
+                { "Equip Back Pack",              "Backpacks" },
+                { "Equip Riding",                 "Riding Gear" },
+                { "Equip Pet Armor",              "Pet Armor" },
+                { "Vehicle Special",              "Special Vehicles" },
+                { "Korea Food",                   "Korean Food" },
+                { "Potion",                       "Potions" },
+                { "Food Horse",                   "Horse Food" },
+                { "Material Food",                "Food Materials" },
+                { "Material Medical",             "Medical Materials" },
+                { "Material Object",              "Objects" },
+                { "ETC Book",                     "Books" },
+                { "ETC Book Recipe",              "Recipe Books" },
+                { "ETC Craft Recipe",             "Crafting Recipes" },
+                { "ETC Treasure Map",             "Treasure Maps" },
+                { "ETC Document",                 "Documents" },
+                { "ETC Document Wall Paper",      "Wall Documents" },
+                { "ETC Document Wanted",          "Wanted Posters" },
+                { "Equip Tool",                   "Tools" },
+                { "Money",                        "Currency" },
+                { "ETC Quest Memory",             "Quest Memories" },
+                { "ETC Quest Equip Special Boss", "Special Boss Quest Equipment" },
+                { "ETC Key",                      "Keys" },
+                { "Sealed Artifact",              "Sealed Artifacts" },
+                { "Control",                      "Controls" },
+            };
+            for (const Rename& r : exact)
+                if (_stricmp(label, r.from) == 0)
+                {
+                    snprintf(label, n, "%s", r.to);
+                    return;
+                }
+
+            // Title-case ordinary lowercase words while preserving deliberate
+            // all-caps abbreviations such as ETC, HP and MP.
+            bool wordStart = true;
+            for (char* p = label; *p; ++p)
+            {
+                if (*p == ' ' || *p == '-' || *p == '(') { wordStart = true; continue; }
+                if (wordStart && islower(static_cast<unsigned char>(*p)))
+                    *p = static_cast<char>(toupper(static_cast<unsigned char>(*p)));
+                wordStart = false;
+            }
+        }
+
         bool GroupName(uint16_t row, char* out, size_t n)
         {
             uintptr_t grp = 0;
             if (!DefForRow(g_grpTableGlobal, row, &grp)) return false;
-            return LocString(grp + kOff_GrpDef_Name, out, n);
+            if (LocString(grp + kOff_GrpDef_Name, out, n)) return true;
+
+            // Localisation is often still lazy/unavailable when the Add Item
+            // catalog is first opened in 1.17. The category row nevertheless
+            // carries a stable engine key such as
+            // "ItemGroup_SubCategory_Equip_Weapon_Range". Use that game-owned
+            // key as a readable fallback instead of collapsing every valid row
+            // into the synthetic "Uncategorised" label.
+            char key[160]{};
+            if (!StringField(grp + kOff_GrpDef_Key, key, sizeof(key))) return false;
+            const char* readable = key;
+            constexpr const char* kSub = "ItemGroup_SubCategory_";
+            constexpr const char* kCat = "ItemGroup_Category_";
+            constexpr const char* kAny = "ItemGroup_";
+            if (_strnicmp(key, kSub, strlen(kSub)) == 0) readable += strlen(kSub);
+            else if (_strnicmp(key, kCat, strlen(kCat)) == 0) readable += strlen(kCat);
+            else if (_strnicmp(key, kAny, strlen(kAny)) == 0) readable += strlen(kAny);
+            if (!*readable) return false;
+            Prettify(readable, out, n);
+            CleanCategoryFallback(out, n);
+            return out[0] != 0;
         }
 
         // --- The game's own icons (see offsets.h) ----------------------------
@@ -1074,7 +1170,7 @@ namespace trinity::game
         // anchor finds both, selected by the name.
         const uint8_t kItemPrologue[] = {
             0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18,
-            0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x40, 0x0F, 0xB7, 0x39,
+            0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x50, 0x0F, 0xB7, 0x39,
             0x48, 0x8B, 0x1D,
         };
         uintptr_t FindItemPrologueAbove(uintptr_t lea)
@@ -1152,9 +1248,15 @@ namespace trinity::game
         const uintptr_t commitAddr = mem::FindPattern(kSig_InvCommitPlacement);
         const uintptr_t freeAddr   = mem::FindPattern(kSig_InvFreePlacements);
         const uintptr_t dtorAddr   = mem::FindPattern(kSig_TrItemValueDtor);
-        if (ctorAddr)   oItemValueCtor   = reinterpret_cast<ItemValueCtor_t>(ctorAddr);
+        if (ctorAddr && mem::CountMatches(kSig_TrItemValueCtor, 2) != 1)
+            LOG_WARN("inventory: TrItemValue ctor signature is ambiguous - Add Item disabled for safety.");
+        if (ctorAddr && mem::CountMatches(kSig_TrItemValueCtor, 2) == 1)
+            oItemValueCtor = reinterpret_cast<ItemValueCtor_t>(ctorAddr);
         if (commitAddr) oCommitPlacement = reinterpret_cast<CommitPlacement_t>(commitAddr);
-        if (freeAddr)   oFreePlacements  = reinterpret_cast<FreePlacements_t>(freeAddr);
+        if (freeAddr && mem::CountMatches(kSig_InvFreePlacements, 2) != 1)
+            LOG_WARN("inventory: placement cleanup signature is ambiguous - Add Item disabled for safety.");
+        if (freeAddr && mem::CountMatches(kSig_InvFreePlacements, 2) == 1)
+            oFreePlacements = reinterpret_cast<FreePlacements_t>(freeAddr);
         if (dtorAddr)   oItemValueDtor   = reinterpret_cast<ItemValueDtor_t>(dtorAddr);
         // The TEB lookup for the realm flag. Deliberately NtQueryInformationThread
         // rather than a hand-rolled `mov rax, gs:[30h]` stub: that was tried and
@@ -1163,11 +1265,11 @@ namespace trinity::game
         if (const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll"))
             oNtQueryInfoThread = reinterpret_cast<NtQueryInformationThread_t>(
                 GetProcAddress(ntdll, "NtQueryInformationThread"));
-        if (!ctorAddr || !commitAddr || !freeAddr || !dtorAddr || !oNtQueryInfoThread)
+        if (!oItemValueCtor || !oCommitPlacement || !oFreePlacements || !oItemValueDtor || !oNtQueryInfoThread)
             LOG_WARN("inventory: add-item path incomplete (ctor=%d commit=%d free=%d dtor=%d teb=%d)"
                      " - Add Item will be refused.",
-                     ctorAddr ? 1 : 0, commitAddr ? 1 : 0, freeAddr ? 1 : 0, dtorAddr ? 1 : 0,
-                     oNtQueryInfoThread ? 1 : 0);
+                     oItemValueCtor ? 1 : 0, oCommitPlacement ? 1 : 0, oFreePlacements ? 1 : 0,
+                     oItemValueDtor ? 1 : 0, oNtQueryInfoThread ? 1 : 0);
 
         if (!g_candLockInit)
         {
@@ -2236,20 +2338,52 @@ namespace trinity::game
         // same tab, same icon, same ordering rules.
         std::vector<Group> g_catalog;
         bool g_catalogBuilt = false;
+        int  g_catalogDiagState = 0;
 
         void BuildCatalog()
         {
             if (g_catalogBuilt) return;
-            // Set first, unconditionally: if the table is not resolvable we must
-            // not retry a walk of thousands of rows on every frame the menu is
-            // open.
-            g_catalogBuilt = true;
-            if (!g_itemTableGlobal) return;
+            // The resolver global can be found while its runtime table pointer
+            // is still null during loading. Do not permanently cache that
+            // transient state: retry the two cheap guarded reads until the game
+            // publishes a valid table, then build the thousands of rows once.
+            if (!g_itemTableGlobal)
+            {
+                if (g_catalogDiagState != 1)
+                {
+                    LOG_WARN("inventory: catalog wait - iteminfo resolver global is missing.");
+                    g_catalogDiagState = 1;
+                }
+                return;
+            }
 
             uintptr_t table = 0;
-            if (!ReadPtr(g_itemTableGlobal, &table)) return;
+            if (!ReadPtr(g_itemTableGlobal, &table) || table < kMinPointer)
+            {
+                if (g_catalogDiagState != 2)
+                {
+                    LOG_WARN("inventory: catalog wait - iteminfo global=%p has no runtime table (value=%p).",
+                             reinterpret_cast<void*>(g_itemTableGlobal), reinterpret_cast<void*>(table));
+                    g_catalogDiagState = 2;
+                }
+                return;
+            }
             uint32_t count = 0;
-            if (!Read32(table + kOff_ItemTable_Count, &count) || !count || count > 65536) return;
+            if (!Read32(table + kOff_ItemTable_Count, &count) || !count || count > 65536)
+            {
+                if (g_catalogDiagState != 3)
+                {
+                    LOG_WARN("inventory: catalog wait - table=%p has invalid row count %u at +0x%llX.",
+                             reinterpret_cast<void*>(table), static_cast<unsigned>(count),
+                             static_cast<unsigned long long>(kOff_ItemTable_Count));
+                    g_catalogDiagState = 3;
+                }
+                return;
+            }
+            LOG("inventory: catalog table ready - global=%p table=%p rows=%u.",
+                reinterpret_cast<void*>(g_itemTableGlobal), reinterpret_cast<void*>(table),
+                static_cast<unsigned>(count));
+            g_catalogBuilt = true;
 
             uint32_t named = 0;
             for (uint32_t row = 0; row < count; ++row)
@@ -2306,6 +2440,8 @@ namespace trinity::game
                 if (a.cat.tabOrder != b.cat.tabOrder) return a.cat.tabOrder < b.cat.tabOrder;
                 return a.cat.order < b.cat.order;
             });
+            LOG("inventory: catalog built - named=%u groups=%u.",
+                static_cast<unsigned>(named), static_cast<unsigned>(g_catalog.size()));
         }
 
         Group* CatGroupAt(int cat)

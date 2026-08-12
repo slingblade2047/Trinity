@@ -144,11 +144,13 @@ namespace trinity::game
         bool IsHealthType(int32_t t)  { return t == StatType_Health; }
         // Both stamina-typed gauges: 17 (a stamina meter) and 20 (the gauge the
         // sprint gate actually consumes). Pinning both keeps the bar full.
-        bool IsStaminaType(int32_t t) { return t == StatType_Stamina || t == StatType_SprintSt; }
+        bool IsStaminaType(int32_t t) { return t == StatType_Stamina || t == StatType_SprintSt ||
+                                               t == StatType_StaminaPool117; }
         // Both spirit-typed gauges: 18 (an internal meter) and 21 (the pool the
         // HUD bar and skill spend actually draw from). Pinning both keeps the
         // displayed bar full, mirroring the stamina/sprint-gauge split above.
-        bool IsSpiritType(int32_t t)  { return t == StatType_Spirit || t == StatType_SpiritPool; }
+        bool IsSpiritType(int32_t t)  { return t == StatType_Spirit || t == StatType_SpiritPool ||
+                                               t == StatType_SpiritPool117; }
 
         // True if `e` is a member of one of the resolved player sets (a tiny
         // linear scan; a fresh resolve keeps each set to just the live bodies').
@@ -338,6 +340,31 @@ namespace trinity::game
             }
             for (int i = nStam; i < kMaxStatEntries; ++i) g_stamEntries[i].store(0, std::memory_order_release);
             for (int i = nSpir; i < kMaxStatEntries; ++i) g_spiritEntries[i].store(0, std::memory_order_release);
+
+            // 1.17 does not route every stamina/spirit drain through the old
+            // stat-commit funnel. Keep the hook for writes that still use it,
+            // and also pin only the freshly resolved, type-validated player
+            // gauges once per game update. This avoids touching guessed
+            // addresses or non-player stats.
+            const State& st = State::Get();
+            if (st.infStamina)
+                for (int i = 0; i < nStam; ++i)
+                    PinEntry(g_stamEntries[i].load(std::memory_order_relaxed));
+            if (st.infSpirit)
+                for (int i = 0; i < nSpir; ++i)
+                    PinEntry(g_spiritEntries[i].load(std::memory_order_relaxed));
+
+            // Log only when discovery changes, so the console shows whether
+            // the player chain and gauge typing are healthy without frame spam.
+            static int s_lastPlayers = -1, s_lastStam = -1, s_lastSpir = -1;
+            if (nPlayers != s_lastPlayers || nStam != s_lastStam || nSpir != s_lastSpir)
+            {
+                LOG("player: stat discovery - players=%d stamina=%d spirit=%d flags(stamina=%d spirit=%d).",
+                    nPlayers, nStam, nSpir, st.infStamina ? 1 : 0, st.infSpirit ? 1 : 0);
+                s_lastPlayers = nPlayers;
+                s_lastStam = nStam;
+                s_lastSpir = nSpir;
+            }
         }
 
         // --- God Mode / Infinite Stamina / Infinite Spirit: guard the stat-
