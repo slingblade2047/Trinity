@@ -13,6 +13,7 @@
 #include "../core/settings.h"
 #include "../core/state.h"
 #include "../core/text.h"
+#include "../core/logger.h"
 #include "../game/player.h"
 #include "../game/teleport.h"
 #include "../game/inventory.h"
@@ -865,11 +866,32 @@ namespace trinity::gui
     // Set All has to know the answer BEFORE the list is drawn (it says how many
     // items it is about to hit), so the rule lives here where both can read it
     // rather than being written out twice and drifting apart.
+    static bool IsUncategorised(int st, int cat)
+    {
+        const char* name = game::Inventory::CategoryName(st, cat);
+        return name && _stricmp(name, "Uncategorised") == 0;
+    }
+
+    // Uncategorised is where malformed or unresolved game records collect.
+    // Never pass sentinel records to the editor widget: even a read while the
+    // game is rebuilding this bucket has caused a transition-time CTD.
+    static bool ItemRecordSafe(const game::Inventory::ItemInfo& it, bool strict)
+    {
+        if (!it.name || !it.name[0] || it.qty <= 0 || it.qty >= 2147483000LL)
+            return false;
+        if (it.typeId == 0 || it.typeId == 0xFFFF)
+            return false;
+        if (strict && strncmp(it.name, "Item #", 6) == 0)
+            return false;
+        return true;
+    }
+
     static bool ItemShown(int st, int cat, int idx, const char* filter,
                           game::Inventory::ItemInfo* out)
     {
         game::Inventory::ItemInfo it{};
         if (!game::Inventory::GetItemInfo(st, cat, idx, &it)) return false;
+        if (!ItemRecordSafe(it, IsUncategorised(st, cat))) return false;
         if (filter && filter[0] && !ContainsNoCase(it.name, filter)) return false;
         if (out) *out = it;
         return true;
@@ -889,7 +911,10 @@ namespace trinity::gui
         if (!ItemShown(st, cat, idx, filter, &it)) return false;
 
         char desc[224];
-        if (locked)
+        if (locked && IsUncategorised(st, cat))
+            snprintf(desc, sizeof(desc),
+                     "Read-only safety mode for unresolved inventory records.");
+        else if (locked)
             snprintf(desc, sizeof(desc),
                      "Editing is locked until your save finishes loading.");
         else if (showCat)
@@ -1106,6 +1131,7 @@ namespace trinity::gui
 
     static void RenderInventoryCat()
     {
+        const bool uncategorised = IsUncategorised(s_invStore, s_invCat);
         ui::Begin(game::Inventory::CategoryName(s_invStore, s_invCat));
 
         game::Inventory::Refresh();
@@ -1121,7 +1147,7 @@ namespace trinity::gui
         // Left/Right for its amount. PgUp/PgDn/Home/End still page the list.
         ui::Search(s_invFilter, sizeof(s_invFilter), "Narrow this category down by name.");
 
-        const bool locked = !game::Inventory::EditsPersist();
+        const bool locked = uncategorised || !game::Inventory::EditsPersist();
 
         // Exactly the rows the list below will draw, counted before Set All so
         // it can name the number, and reused afterwards for "No matches".
@@ -1130,7 +1156,31 @@ namespace trinity::gui
             if (ItemShown(s_invStore, s_invCat, i, s_invFilter, nullptr))
                 ++shown;
 
-        RenderSetAll(shown, locked);
+        if (uncategorised)
+        {
+            ui::Option("Read-only safety mode",
+                       "Unsafe, unresolved and sentinel records are hidden; bulk editing is disabled.");
+
+            static int loggedStore = -1;
+            static int loggedCat = -1;
+            static int loggedTotal = -1;
+            if (loggedStore != s_invStore || loggedCat != s_invCat || loggedTotal != total)
+            {
+                int accepted = 0;
+                for (int i = 0; i < total; ++i)
+                    if (ItemShown(s_invStore, s_invCat, i, nullptr, nullptr))
+                        ++accepted;
+                LOG_WARN("inventory: Uncategorised safety - accepted=%d skipped=%d total=%d; page is read-only",
+                         accepted, total - accepted, total);
+                loggedStore = s_invStore;
+                loggedCat = s_invCat;
+                loggedTotal = total;
+            }
+        }
+        else
+        {
+            RenderSetAll(shown, locked);
+        }
 
         for (int i = 0; i < total; ++i)
             RenderItemRow(s_invStore, s_invCat, i, s_invFilter, /*showCat=*/false, locked);

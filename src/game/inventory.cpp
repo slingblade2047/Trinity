@@ -1809,22 +1809,11 @@ namespace trinity::game
         // must never do.
         RunPendingAdd();
 
-        // Heal the used-slot accounting that quantity edits bend and reloads
-        // detonate (see RepairUsedSlots - the "inventory full beside empty
-        // slots" bug). Always on, not gated behind a toggle: the damage this
-        // repairs was done by the editor in an earlier session, so the toggle
-        // state now says nothing about whether a bucket needs healing. 1 Hz;
-        // a strict no-op on buckets the engine's own accounting produced.
-        {
-            static ULONGLONG s_lastRepair = 0;
-            const ULONGLONG now = GetTickCount64();
-            if (now - s_lastRepair >= 1000)
-            {
-                s_lastRepair = now;
-                RepairUsedSlots(CurrentHolder());
-                RepairUsedSlots(ServerHolder());
-            }
-        }
+        // Do not rewrite used-slot accounting during ordinary gameplay. Quest
+        // pickups use the same inventory transaction window, and a periodic
+        // repair here can race the engine's acquisition bookkeeping before the
+        // quest system observes it. Inventory mutation must remain explicit:
+        // only Add Item or a direct editor action may write inventory state.
 
         if (st.invStackSize)
         {

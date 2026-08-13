@@ -97,9 +97,12 @@ namespace trinity::game
         // each tick by RefreshSelf(). The stat hooks match against these live
         // sets instead of a historical cache: because they are always the
         // current bodies', membership (not a ring) is correct and self-healing.
-        // Sized generously so transient player-class characters the engine spawns
-        // during transitions can never evict a real protagonist for a tick.
-        constexpr int kMaxPlayers      = 8;                    // 3 protagonists + transients/margin
+        // Public sets have margin for scanning, but a VALID gameplay party can
+        // never exceed the game's three protagonists. A fourth same-vtable body
+        // is the character/equipment-menu preview actor and must never receive
+        // stat writes.
+        constexpr int kMaxPlayers      = 8;
+        constexpr int kMaxPartyPlayers = 3;
         constexpr int kMaxGaugePerType = 3;                    // stamina/spirit gauges per body
         constexpr int kMaxStatEntries  = kMaxPlayers * kMaxGaugePerType;
 
@@ -301,6 +304,11 @@ namespace trinity::game
 
             // (B) Track every active instance of that class: same vtable AND a
             // resolvable vital chain (skips the pool's empty slots).
+            uintptr_t nextHp[kMaxPlayers]{};
+            uintptr_t nextActors[kMaxPlayers]{};
+            uintptr_t nextTargets[kMaxPlayers]{};
+            uintptr_t nextStam[kMaxStatEntries]{};
+            uintptr_t nextSpir[kMaxStatEntries]{};
             int nPlayers = 0, nStam = 0, nSpir = 0;
             for (uint32_t i = 0; i < count && nPlayers < kMaxPlayers; ++i)
             {
@@ -312,9 +320,9 @@ namespace trinity::game
                 SelfChain c;
                 if (!WalkSelfChain(owner, &c)) continue;
 
-                g_hpEntries[nPlayers].store(c.statArray, std::memory_order_release);
-                g_actors[nPlayers].store(c.actor, std::memory_order_release);
-                g_targetOwners[nPlayers].store(c.targetOwner, std::memory_order_release);
+                nextHp[nPlayers] = c.statArray;
+                nextActors[nPlayers] = c.actor;
+                nextTargets[nPlayers] = c.targetOwner;
                 ++nPlayers;
 
                 // The stat entries form one contiguous 0x90-stride array with
@@ -325,10 +333,64 @@ namespace trinity::game
                     const uintptr_t e = c.statArray + k * kSizeof_StatEntry;
                     int32_t stt = 0;
                     if (!StatEntryType(e, &stt)) continue;
-                    if (IsStaminaType(stt))     { if (nStam < kMaxStatEntries) g_stamEntries[nStam++].store(e, std::memory_order_release); }
-                    else if (IsSpiritType(stt)) { if (nSpir < kMaxStatEntries) g_spiritEntries[nSpir++].store(e, std::memory_order_release); }
+                    if (IsStaminaType(stt))     { if (nStam < kMaxStatEntries) nextStam[nStam++] = e; }
+                    else if (IsSpiritType(stt)) { if (nSpir < kMaxStatEntries) nextSpir[nSpir++] = e; }
                 }
             }
+
+            // Opening the game's character/equipment screen creates a fourth
+            // same-class preview body. The old resolver published it and then
+            // PinEntry wrote into its temporary stat array, causing the CTD.
+            // Clear first and stay inert for this tick; never publish preview
+            // pointers, even briefly.
+            if (nPlayers > kMaxPartyPlayers)
+            {
+                ClearPlayerSets();
+                static bool s_previewLogged = false;
+                if (!s_previewLogged)
+                {
+                    LOG_WARN("player: %d player-class bodies detected - preview/transition guard "
+                             "suspended stat writes.", nPlayers);
+                    s_previewLogged = true;
+                }
+                return;
+            }
+
+            // Require the exact candidate identity set to survive three game
+            // ticks. Transient menu/swap bodies disappear before they can ever
+            // become writable; normal gameplay resumes a few frames later.
+            static uintptr_t s_candidateHp[kMaxPartyPlayers]{};
+            static int s_candidateCount = 0;
+            static int s_stableTicks = 0;
+            bool same = nPlayers == s_candidateCount;
+            for (int i = 0; same && i < nPlayers; ++i)
+                same = nextHp[i] == s_candidateHp[i];
+            if (!same)
+            {
+                s_candidateCount = nPlayers;
+                for (int i = 0; i < kMaxPartyPlayers; ++i)
+                    s_candidateHp[i] = (i < nPlayers) ? nextHp[i] : 0;
+                s_stableTicks = 1;
+                ClearPlayerSets();
+                return;
+            }
+            if (s_stableTicks < 3)
+            {
+                ++s_stableTicks;
+                ClearPlayerSets();
+                return;
+            }
+
+            for (int i = 0; i < nPlayers; ++i)
+            {
+                g_hpEntries[i].store(nextHp[i], std::memory_order_release);
+                g_actors[i].store(nextActors[i], std::memory_order_release);
+                g_targetOwners[i].store(nextTargets[i], std::memory_order_release);
+            }
+            for (int i = 0; i < nStam; ++i)
+                g_stamEntries[i].store(nextStam[i], std::memory_order_release);
+            for (int i = 0; i < nSpir; ++i)
+                g_spiritEntries[i].store(nextSpir[i], std::memory_order_release);
 
             // Clear any trailing slots from a previous tick so a stale entry
             // pointer can never accidentally match after a transition/swap.

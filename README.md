@@ -20,7 +20,7 @@ Official upstream project: [github.com/XeTrinityz/Trinity](https://github.com/Xe
 
 ## Version 1.17 compatibility
 
-Version 0.13.43 includes the confirmed 1.17 repairs for:
+Version 0.13.47 includes the confirmed 1.17 repairs for:
 
 - Add Item transaction and persistence
 - Item catalog, names, categories, and icons
@@ -29,6 +29,12 @@ Version 0.13.43 includes the confirmed 1.17 repairs for:
 - Infinite Stamina and Infinite Spirit
 - Equipment table and entry layout
 - Dye record layout, live dye application, and persistence
+- Inventory-editor safety for malformed or unresolved Uncategorised records
+- Quest-safe inventory handling: no background counter writes during normal pickups
+
+Uncategorised inventory groups are deliberately read-only. Invalid internal
+records are hidden so they cannot be passed to the quantity editor and crash
+the game. Valid named inventory categories remain editable.
 
 Known limitation: Abyss Gear socket changes may require reloading the save before their effects become active because the 1.17 effect-refresh function is not yet resolved.
 
@@ -108,5 +114,9 @@ They are fetched during CMake configuration and are not vendored in this reposit
 ## Credits and license
 
 Trinity was created by **XeTrinityz** and released as open source at the [official upstream repository](https://github.com/XeTrinityz/Trinity). The original copyright and MIT license are preserved in [LICENSE](LICENSE).
+
+- **Orcax1399** - research insights, credited on the original mod
+- **Gugi96** - working ASI reference that helped guide the 1.17 compatibility research
+- **slingblade2047** - Crimson Desert 1.17 compatibility update
 
 Crimson Desert and its assets are trademarks/copyrights of their respective owners. No game assets are distributed in this repository.

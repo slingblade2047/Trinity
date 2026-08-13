@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.47 - Quest-item acquisition safety (test)
+
+- Removed the automatic one-second used-slot bookkeeping rewrite.
+- Trinity no longer writes inventory counters during ordinary pickups or quest transactions.
+- Add Item and direct quantity edits remain explicit user actions.
+- Retains the v0.13.46 Uncategorised crash protection.
+
+## 0.13.46 - Inventory editor stability
+
+- Prevented a crash when opening an Uncategorised inventory group containing malformed or unresolved game records.
+- Uncategorised inventory groups now use read-only safety mode.
+- Hidden unresolved item names, invalid type IDs, and corrupted or sentinel quantities.
+- Disabled bulk quantity editing on Uncategorised groups.
+- Added an accepted/skipped record count to `Trinity.log` for diagnosis.
+- Retained the player-stat transition guard introduced during 1.17 testing.
+
 ## 0.13.43 - Crimson Desert 1.17 compatibility
 
 - Restored Add Item and durable inventory placement.
