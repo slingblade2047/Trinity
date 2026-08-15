@@ -389,7 +389,8 @@ namespace trinity::game
     // Prologue: mov rax,rsp; mov [rax+18],rbx; mov [rax+10],edx; mov [rax+8],rcx;
     // push rdi; sub rsp,80h. Unique in this build (IDB 0x505140).
     inline constexpr const char* kSig_TravelToNode =
-        "48 8B C4 48 89 58 18 89 50 10 48 89 48 08 57 48 81 EC 80 00 00 00";
+        "48 89 5C 24 18 89 54 24 10 48 89 4C 24 08 55 56 57 48 8D 6C 24 B9 "
+        "48 81 EC B0 00 00 00 41 8B F8 33 DB 83 FA FF";
 
     // The destinations live in the LevelGimmickSceneObjectInfo registry, a global
     // (IDB qword_6185008), read through its resolver sub_396CC0(u32* sceneId)
@@ -808,7 +809,7 @@ namespace trinity::game
     // sub-objects the ctor allocated; does NOT free the buffer itself.
     inline constexpr const char* kSig_TrItemValueDtor =
         "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 48 83 EC 20 "
-        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF 03 02 00 00 31 F6";
+        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF FB 01 00 00 31 F6";
 
     inline constexpr uintptr_t kOff_InvHolder_Container = 0x08; // holder+8 -> container
     // ItemInfo._defaultPushInventoryInfo - which storage this item goes to by
@@ -1108,7 +1109,7 @@ namespace trinity::game
     //   match+37: `vmovss xmm0, cs:dword_615A4F0`     (value; 8-byte instr)
     // IDB match at 0x8FC348. Unique block.
     inline constexpr const char* kSig_GameSpeed =
-        "80 3D ?? ?? ?? ?? 01 75 30 48 8B 4F 58 41 8B C7 C5 78 2F 59 64 0F 97 C0 "
+        "80 3D ?? ?? ?? ?? 01 75 30 48 8B 4F 58 41 8B C7 C5 78 2F 61 64 0F 97 C0 "
         "85 C0 74 09 80 3D ?? ?? ?? ?? 01 75 14 C5 FA 10 05 ?? ?? ?? ?? C5 FA 11 "
         "41 64 C6 05 ?? ?? ?? ?? 00";
     inline constexpr uintptr_t kOff_GameSpeed_FlagDisp    = 2;  // disp32 of cmp cs:byte_606B9CE,1
@@ -1141,7 +1142,7 @@ namespace trinity::game
     // followed by the two `vmovups ymm0, cs:<global>` (server if TLS[498], else
     // client). The two RIP operands resolve to the server and client globals.
     inline constexpr const char* kSig_FieldTimeRealm =
-        "BA F2 01 00 00 48 8B 08 0F B6 04 0A 84 C0 74 0A "
+        "BA F6 01 00 00 48 8B 08 0F B6 04 0A 84 C0 74 0A "
         "C5 FC 10 05 ?? ?? ?? ?? EB 08 C5 FC 10 05 ?? ?? ?? ??";
     // Within the match: server `vmovups` at +0x10, client `vmovups` at +0x1A;
     // each is 8 bytes (4-byte opcode C5 FC 10 05 + 4-byte disp at its tail).
@@ -1319,7 +1320,7 @@ namespace trinity::game
     inline constexpr const char* kSig_EquipBatch =
         "48 89 5C 24 10 55 56 57 41 54 41 55 41 56 41 57 "
         "48 8D AC 24 ? ? ? ? B8 ? ? ? ? "
-        "E8 ? ? ? ? 48 2B E0 4D 8B F8 4C 8B E2 4C 8B F1 4C 8B 69 08";
+        "E8 ? ? ? ? 48 2B E0 4D 8B E0 4C 8B EA 4C 8B F1 4C 8B 79 08";
 
     // The client dye-ack applier (IDB sub_7D9C50):
     //     int* f(void* equipComponent, int* outErr, void* batch1960)
@@ -1498,8 +1499,8 @@ namespace trinity::game
     // pre-seeded there, so the first in-game gift/feed is already scaled and a
     // loaded save is never re-scaled. See the trinity-friendly-system notes.
     inline constexpr const char* kSig_FriendlySetNpc =
-        "49 89 E3 53 55 56 57 41 56 48 83 EC 60 48 89 D7 48 8D 69 18 "
-        "0F B7 42 04 66 41 89 43 08";
+        "49 89 E3 53 55 56 57 41 56 48 83 EC 60 48 89 D7 "
+        "8B 05 ? ? ? ? 2D ? ? ? ? 48 8D 2C 01 0F B7 42 04 66 41 89 43 08";
     inline constexpr const char* kSig_FriendlySetPet =
         "4C 8B DC 53 55 56 57 41 56 48 83 EC 60 48 8B FA 48 8D 69 38 "
         "0F B7 42 04 66 41 89 43 08";

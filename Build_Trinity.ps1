@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $source = $PSScriptRoot
-$build = Join-Path $source 'build-clean'
+$build = Join-Path $source 'build'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
 if (-not (Get-Command cmake.exe -ErrorAction SilentlyContinue)) {

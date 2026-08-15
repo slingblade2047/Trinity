@@ -5,6 +5,6 @@
 // VERSIONINFO resource (Trinity.rc) builds FILEVERSION/PRODUCTVERSION from them.
 #define TRINITY_VERSION_MAJOR 0
 #define TRINITY_VERSION_MINOR 13
-#define TRINITY_VERSION_PATCH 47
+#define TRINITY_VERSION_PATCH 49
 
-#define TRINITY_VERSION "0.13.47-quest-safe-inventory"
+#define TRINITY_VERSION "0.13.49-cd-1.18"

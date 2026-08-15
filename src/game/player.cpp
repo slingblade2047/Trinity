@@ -345,15 +345,40 @@ namespace trinity::game
             // pointers, even briefly.
             if (nPlayers > kMaxPartyPlayers)
             {
-                ClearPlayerSets();
+                // Menus and some populated scenes can expose extra instances
+                // of the protagonist class. Do not disable all stat features:
+                // keep only the first three live party bodies, which are the
+                // same stable set published during normal gameplay, and drop
+                // every gauge collected from later preview/duplicate bodies.
+                nPlayers = kMaxPartyPlayers;
+                nStam = 0;
+                nSpir = 0;
+                for (int i = 0; i < nPlayers; ++i)
+                {
+                    const uintptr_t statArray = nextHp[i];
+                    for (int k = 1; k < kStatArray_ScanEntries; ++k)
+                    {
+                        const uintptr_t e = statArray + k * kSizeof_StatEntry;
+                        int32_t stt = 0;
+                        if (!StatEntryType(e, &stt)) continue;
+                        if (IsStaminaType(stt))
+                        {
+                            if (nStam < kMaxStatEntries) nextStam[nStam++] = e;
+                        }
+                        else if (IsSpiritType(stt))
+                        {
+                            if (nSpir < kMaxStatEntries) nextSpir[nSpir++] = e;
+                        }
+                    }
+                }
+
                 static bool s_previewLogged = false;
                 if (!s_previewLogged)
                 {
-                    LOG_WARN("player: %d player-class bodies detected - preview/transition guard "
-                             "suspended stat writes.", nPlayers);
+                    LOG_WARN("player: extra player-class bodies detected - using the first %d "
+                             "stable party bodies for stat writes.", kMaxPartyPlayers);
                     s_previewLogged = true;
                 }
-                return;
             }
 
             // Require the exact candidate identity set to survive three game

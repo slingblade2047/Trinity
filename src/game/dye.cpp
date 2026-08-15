@@ -619,7 +619,7 @@ namespace trinity::game
         }
         if (!apply)
         {
-            LOG_ERR("dye: 1.17 apply function not found - applying disabled.");
+            LOG_ERR("dye: apply function not found - applying disabled.");
             return false;
         }
         g_dyeApply = reinterpret_cast<DyeApplyBatch_t>(apply);
@@ -629,7 +629,7 @@ namespace trinity::game
             LOG_WARN("dye: upsert signature not found - dye will apply but not persist.");
         else
         {
-            LOG("dye: 1.17 apply @ %p, durable upsert @ %p.",
+            LOG("dye: apply @ %p, durable upsert @ %p.",
                 reinterpret_cast<void*>(apply), reinterpret_cast<void*>(upsert));
         }
         g_dyeUpsert = reinterpret_cast<DyeUpsert_t>(upsert);

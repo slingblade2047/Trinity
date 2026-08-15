@@ -1,6 +1,6 @@
-# Trinity for Crimson Desert 1.17
+# Trinity for Crimson Desert 1.18
 
-Trinity is an in-game DirectX 12 mod menu for **Crimson Desert**, created by **XeTrinityz**. This repository contains a compatibility fork for game version **1.17.00**.
+Trinity is an in-game DirectX 12 mod menu for **Crimson Desert**, created by **XeTrinityz**. This repository contains a compatibility fork updated for game version **1.18**.
 
 Official upstream project: [github.com/XeTrinityz/Trinity](https://github.com/XeTrinityz/Trinity)
 
@@ -18,9 +18,16 @@ Official upstream project: [github.com/XeTrinityz/Trinity](https://github.com/Xe
 - Keyboard, mouse, and controller navigation
 - Optional per-session `Trinity.log`
 
-## Version 1.17 compatibility
+## Version 1.18 compatibility
 
-Version 0.13.47 includes the confirmed 1.17 repairs for:
+Version 0.13.49 revalidates and restores the functions moved by the 1.18 game
+update, including Fast Travel, Add Item cleanup, Game Speed, Advance Time, Dye
+Equipment capture, and NPC Trust. The existing 1.17 inventory, player-stat,
+equipment, dye-persistence, and safety repairs remain included.
+
+## Earlier 1.17 repairs
+
+Version 0.13.48 includes the confirmed 1.17 repairs for:
 
 - Add Item transaction and persistence
 - Item catalog, names, categories, and icons
@@ -29,14 +36,15 @@ Version 0.13.47 includes the confirmed 1.17 repairs for:
 - Infinite Stamina and Infinite Spirit
 - Equipment table and entry layout
 - Dye record layout, live dye application, and persistence
-- Inventory-editor safety for malformed or unresolved Uncategorised records
+- Inventory-editor safety for malformed or unresolved Uncategorized records
 - Quest-safe inventory handling: no background counter writes during normal pickups
+- Stable Infinite Stamina and Infinite Spirit when preview or duplicate player bodies appear
 
-Uncategorised inventory groups are deliberately read-only. Invalid internal
+Uncategorized inventory groups are deliberately read-only. Invalid internal
 records are hidden so they cannot be passed to the quantity editor and crash
 the game. Valid named inventory categories remain editable.
 
-Known limitation: Abyss Gear socket changes may require reloading the save before their effects become active because the 1.17 effect-refresh function is not yet resolved.
+Known limitation: Abyss Gear socket changes may require reloading the save before their effects become active because the effect-refresh function is not yet resolved.
 
 ## Installation
 
@@ -117,6 +125,6 @@ Trinity was created by **XeTrinityz** and released as open source at the [offici
 
 - **Orcax1399** - research insights, credited on the original mod
 - **Gugi96** - working ASI reference that helped guide the 1.17 compatibility research
-- **slingblade2047** - Crimson Desert 1.17 compatibility update
+- **slingblade2047** - Crimson Desert 1.17 and 1.18 compatibility updates
 
 Crimson Desert and its assets are trademarks/copyrights of their respective owners. No game assets are distributed in this repository.
