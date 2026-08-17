@@ -55,6 +55,7 @@ add_library(Trinity SHARED
     src/game/player.cpp
     src/game/teleport.cpp
     src/game/inventory.cpp
+    src/game/storage.cpp
     src/game/world.cpp
     src/game/dye.cpp
     src/game/equipment.cpp

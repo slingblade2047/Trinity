@@ -23,6 +23,17 @@
 
 namespace trinity::game
 {
+    // Native storage UI research (CD 1.18 build 2443). These are inherited
+    // from the working OpenStorageAnywhere implementation and were each
+    // verified unique in the current executable before this diagnostic build.
+    // Storage::Install only observes their arguments; it never changes them.
+    inline constexpr const char* kSig_StorageOpenCapture =
+        "48 89 5C 24 ? 48 89 74 24 ? 55 57 41 56 48 8B EC 48 83 EC 20 45 33 F6";
+    inline constexpr const char* kSig_StorageSetInventoryCapture =
+        "48 89 5C 24 ? 57 48 83 EC 50 48 8B F9 E8 ? ? ? ? 48 8B CF";
+    inline constexpr const char* kSig_StorageWarehouseCapture =
+        "48 89 5C 24 08 4C 89 44 24 18 55 56 57 41 54 41 55 41 56 41 57 "
+        "48 8D AC 24 ? ? ? ? 48 81 EC 50 04 00 00 49 8B D9";
     // Any pointer below this is treated as bogus (unmapped / small-int garbage).
     inline constexpr uintptr_t kMinPointer = 0x10000000;
 
@@ -809,7 +820,14 @@ namespace trinity::game
     // sub-objects the ctor allocated; does NOT free the buffer itself.
     inline constexpr const char* kSig_TrItemValueDtor =
         "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 48 83 EC 20 "
-        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF FB 01 00 00 31 F6";
+        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF ? ? ? ? 2B 3D ? ? ? ? "
+        "31 F6 48 85 C9 74 25";
+    // CD 1.18.02 removed the runtime subtraction used to derive the TLS byte
+    // offset. The destructor body and object layout remain otherwise intact.
+    inline constexpr const char* kSig_TrItemValueDtor11802 =
+        "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 48 89 4C 24 08 57 48 83 EC 20 "
+        "48 89 CB 48 8D 05 ? ? ? ? 48 89 01 48 8B 89 98 00 00 00 BF ? ? ? ? "
+        "31 F6 48 85 C9 74 25 65 48 8B 04 25 58 00 00 00";
 
     inline constexpr uintptr_t kOff_InvHolder_Container = 0x08; // holder+8 -> container
     // ItemInfo._defaultPushInventoryInfo - which storage this item goes to by
@@ -1500,7 +1518,8 @@ namespace trinity::game
     // loaded save is never re-scaled. See the trinity-friendly-system notes.
     inline constexpr const char* kSig_FriendlySetNpc =
         "49 89 E3 53 55 56 57 41 56 48 83 EC 60 48 89 D7 "
-        "8B 05 ? ? ? ? 2D ? ? ? ? 48 8D 2C 01 0F B7 42 04 66 41 89 43 08";
+        "48 8D 69 18 0F B7 42 04 66 41 89 43 08 49 8D 4B 08 E8 ? ? ? ? "
+        "48 89 C2 48 89 E9 E8 ? ? ? ? 48 89 C3 31 F6 48 85 C0";
     inline constexpr const char* kSig_FriendlySetPet =
         "4C 8B DC 53 55 56 57 41 56 48 83 EC 60 48 8B FA 48 8D 69 38 "
         "0F B7 42 04 66 41 89 43 08";

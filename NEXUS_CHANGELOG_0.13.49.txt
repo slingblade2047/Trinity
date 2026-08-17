@@ -1,0 +1,7 @@
+Updated Trinity for Crimson Desert 1.18
+Restored Fast Travel
+Restored Add Item cleanup and persistence path
+Restored Game Speed and Advance Time
+Restored Dye Equipment capture
+Restored NPC Trust Multiplier
+Retained quest-item, inventory-editor, and stamina/spirit safety fixes

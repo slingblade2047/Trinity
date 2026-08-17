@@ -1247,7 +1247,9 @@ namespace trinity::game
         const uintptr_t ctorAddr   = mem::FindPattern(kSig_TrItemValueCtor);
         const uintptr_t commitAddr = mem::FindPattern(kSig_InvCommitPlacement);
         const uintptr_t freeAddr   = mem::FindPattern(kSig_InvFreePlacements);
-        const uintptr_t dtorAddr   = mem::FindPattern(kSig_TrItemValueDtor);
+        uintptr_t dtorAddr = mem::FindPattern(kSig_TrItemValueDtor);
+        if (!dtorAddr)
+            dtorAddr = mem::FindPattern(kSig_TrItemValueDtor11802);
         if (ctorAddr && mem::CountMatches(kSig_TrItemValueCtor, 2) != 1)
             LOG_WARN("inventory: TrItemValue ctor signature is ambiguous - Add Item disabled for safety.");
         if (ctorAddr && mem::CountMatches(kSig_TrItemValueCtor, 2) == 1)

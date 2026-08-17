@@ -8,6 +8,7 @@
 #include "../game/player.h"
 #include "../game/teleport.h"
 #include "../game/inventory.h"
+#include "../game/storage.h"
 #include "../game/world.h"
 #include "../game/dye.h"
 #include "../game/equipment.h"

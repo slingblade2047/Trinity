@@ -1,0 +1,6 @@
+Updated Trinity for Crimson Desert 1.18.02.
+Restored Add Item after the update changed the item-value destructor layout.
+Confirmed added items persist after saving and reloading.
+Revalidated Infinite Stamina, Infinite Spirit, God Mode, Fast Travel, Dye Equipment, and the inventory catalog.
+Removed temporary diagnostic storage tracing from the release build.
+Retains the existing quest-item and inventory-editor safety fixes.

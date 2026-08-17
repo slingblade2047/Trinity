@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.13.54 - Crimson Desert 1.18.02 compatibility
+
+- Restored Add Item after the 1.18.02 executable update changed the item-value destructor layout.
+- Added a verified 1.18.02 destructor signature while retaining compatibility with the previous 1.18 build.
+- Revalidated the inventory catalog, Fast Travel, player-stat, and dye paths against 1.18.02.
+- Confirmed Add Item persistence after saving and reloading.
+- Confirmed Infinite Stamina, Infinite Spirit, God Mode, Fast Travel, and Dye Equipment in game.
+- Removed the temporary storage-call tracing hooks from the public release build.
+- Retained the quest-item and inventory-editor safety fixes from earlier releases.
+
+## 0.13.51 - Crimson Desert build 2443 hotfix
+
+- Restored Add Item after build 1.0.0.2443 changed the internal item-value destructor.
+- Restored the NPC Trust Multiplier after its setter function moved.
+- Revalidated both replacement signatures as unique in executable build 1.0.0.2443.
+- Confirmed Add Item, Infinite Stamina, Infinite Spirit, Fast Travel, Dye Equipment, inventory browsing, and the overlay in game.
+- Retained the quest-item, inventory-editor, and player-stat safety fixes from earlier releases.
+
 ## 0.13.49 - Crimson Desert 1.18 compatibility
 
 - Restored Fast Travel after the 1.18 executable update.

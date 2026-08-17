@@ -20,9 +20,11 @@ Official upstream project: [github.com/XeTrinityz/Trinity](https://github.com/Xe
 
 ## Version 1.18 compatibility
 
-Version 0.13.49 revalidates and restores the functions moved by the 1.18 game
-update, including Fast Travel, Add Item cleanup, Game Speed, Advance Time, Dye
-Equipment capture, and NPC Trust. The existing 1.17 inventory, player-stat,
+Version 0.13.54 supports Crimson Desert 1.18.02. It adds the updated item-value
+destructor signature required by the new executable while retaining the previous
+1.18 fallback. Add Item and persistence, Infinite Stamina, Infinite Spirit,
+God Mode, Fast Travel, Dye Equipment, inventory browsing, and the overlay were
+verified in game. The existing quest-item, inventory-editor, player-stat,
 equipment, dye-persistence, and safety repairs remain included.
 
 ## Earlier 1.17 repairs

@@ -1,0 +1,5 @@
+Updated Trinity for Crimson Desert executable build 1.0.0.2443.
+Restored Add Item after the item-value destructor changed.
+Restored the NPC Trust Multiplier after its internal setter moved.
+Confirmed Add Item persistence in game.
+Confirmed Infinite Stamina, Infinite Spirit, Fast Travel, Dye Equipment, inventory browsing, and the overlay remain compatible.

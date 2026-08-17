@@ -1,0 +1,4 @@
+Crimson Desert 1.18 compatibility update. Restores Fast Travel, Add Item cleanup,
+Game Speed, Advance Time, Dye Equipment capture, and NPC Trust after the game
+update. Includes the previous quest-item, inventory-editor, and player-stat safety
+fixes. Back up your saves before using inventory or equipment editing features.
