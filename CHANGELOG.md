@@ -1,3 +1,12 @@
+﻿## v0.13.63 - Stable Provenance Build
+
+- Returned to the verified v0.13.54 gameplay base for Crimson Desert 1.18.02.
+- Added embedded maintainer, source, upstream, lineage, and research credits.
+- Added System -> About & Credits.
+- Added identifying Windows ASI metadata and startup-log provenance.
+- Added NOTICE.md, CONTRIBUTORS.md, build manifest, and published ASI SHA-256.
+- Documented the storage-controller research following v0.13.56.
+- Excluded the unsafe experimental remote-storage replay path.
 # Changelog
 
 ## 0.13.54 - Crimson Desert 1.18.02 compatibility
@@ -67,3 +76,4 @@
 ### Known limitation
 
 - Abyss Gear socket effects may require a save reload because the 1.17 effect-refresh function is unresolved.
+

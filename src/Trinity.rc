@@ -9,6 +9,7 @@
 
 #include <windows.h>
 #include "core/version.h"
+#include "core/provenance.h"
 
 // IDI_ICON1 ICON "Trinity.ico"
 
@@ -29,14 +30,15 @@ BEGIN
     BEGIN
         BLOCK "040904b0"        // U.S. English, Unicode
         BEGIN
-            VALUE "CompanyName",      "XeTrinityz"
-            VALUE "FileDescription",  "Trinity - Mod Menu for Crimson Desert"
+            VALUE "CompanyName",      "XeTrinityz / slingblade2047"
+            VALUE "FileDescription",  "Trinity - Crimson Desert Compatibility Fork"
             VALUE "FileVersion",      TRINITY_VERSION
             VALUE "InternalName",     "Trinity.asi"
             VALUE "OriginalFilename", "Trinity.asi"
-            VALUE "ProductName",      "Trinity"
+            VALUE "ProductName",      "Trinity Compatibility Fork"
             VALUE "ProductVersion",   TRINITY_VERSION
-            VALUE "LegalCopyright",   "Copyright (C) 2026 XeTrinityz"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 XeTrinityz; compatibility work slingblade2047"
+            VALUE "Comments",         "Source: " TRINITY_SOURCE_URL " | Upstream: " TRINITY_UPSTREAM_URL
         END
     END
     BLOCK "VarFileInfo"

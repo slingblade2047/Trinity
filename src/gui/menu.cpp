@@ -14,6 +14,8 @@
 #include "../core/state.h"
 #include "../core/text.h"
 #include "../core/logger.h"
+#include "../core/version.h"
+#include "../core/provenance.h"
 #include "../game/player.h"
 #include "../game/teleport.h"
 #include "../game/inventory.h"
@@ -1691,6 +1693,8 @@ namespace trinity::gui
 
         ui::Submenu("Keybinds", "keybinds",
                    "Set the keyboard and controller binds for opening the menu and Free Flight.");
+        ui::Submenu("About & Credits", "about",
+                   "Build identity, source repository, license, and contributor credits.");
 
         save |= ui::Toggle("Show FPS Counter", &st.showFps, "Shows your FPS in the corner of the screen.") && st.autoSave;
 
@@ -1707,6 +1711,24 @@ namespace trinity::gui
 
         if (save)
             Settings::Save();
+
+        ui::End();
+    }
+
+    static void RenderAbout()
+    {
+        ui::Begin();
+
+        char version[128]{};
+        snprintf(version, sizeof(version), "Trinity %s", TRINITY_VERSION);
+        ui::Option(version, "Stable Crimson Desert 1.18.02 compatibility build.");
+        ui::Option("XeTrinityz", "Original Trinity creator and maintainer.");
+        ui::Option("Orcax1399", "Research insights credited by the original project.");
+        ui::Option("Gugi96", "Working ASI and reference research that guided compatibility repairs.");
+        ui::Option("slingblade2047", "Crimson Desert 1.17/1.18 compatibility work and fork maintainer.");
+        ui::Option("Source: github.com/slingblade2047/Trinity", "Public source for this build.");
+        ui::Option("Upstream: github.com/XeTrinityz/Trinity", "Original MIT-licensed project.");
+        ui::Option("MIT License", "Copyright and license notices accompany this build.");
 
         ui::End();
     }
@@ -1761,6 +1783,7 @@ namespace trinity::gui
             }
         }
         else if (!strcmp(cur, "keybinds")) RenderKeybinds();
+        else if (!strcmp(cur, "about"))    RenderAbout();
         else if (!strcmp(cur, "ftcats"))   RenderFastTravelCats();
         else if (!strcmp(cur, "ftnodes"))  RenderFastTravelNodes();
         else if (!strcmp(cur, "dyeslots"))  RenderDyeSlots();

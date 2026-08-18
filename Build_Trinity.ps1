@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $source = $PSScriptRoot
-$build = Join-Path $source 'build'
+$build = Join-Path $source 'build-stable-provenance'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
 if (-not (Get-Command cmake.exe -ErrorAction SilentlyContinue)) {
@@ -27,8 +27,11 @@ $ninja = Join-Path $visualStudio 'Common7\IDE\CommonExtensions\Microsoft\CMake\N
 if (-not (Test-Path -LiteralPath $vcvars)) { throw "Developer environment not found: $vcvars" }
 if (-not (Test-Path -LiteralPath $ninja)) { throw "Ninja not found: $ninja" }
 
-$configure = '"{0}" >nul && cmake.exe -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}"' -f
-    $vcvars, $source, $build, $Configuration, $ninja
+$deps = Join-Path (Split-Path (Split-Path $source -Parent) -Parent) 'work\Trinity-1.17-NativeTransaction-Diagnostic-0.13.10-src\build\_deps'
+$imgui = Join-Path $deps 'imgui-src'
+$minhook = Join-Path $deps 'minhook-src'
+$configure = '"{0}" >nul && cmake.exe -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}" -DFETCHCONTENT_SOURCE_DIR_IMGUI="{5}" -DFETCHCONTENT_SOURCE_DIR_MINHOOK="{6}"' -f
+    $vcvars, $source, $build, $Configuration, $ninja, $imgui, $minhook
 $compile = '"{0}" >nul && cmake.exe --build "{1}"' -f $vcvars, $build
 
 & cmd.exe /d /s /c $configure

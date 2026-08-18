@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "state.h"
 #include "version.h"
+#include "provenance.h"
 #include "../hooks/dx12_hook.h"
 #include "../game/player.h"
 #include "../game/teleport.h"
@@ -25,6 +26,9 @@ namespace trinity
         // Console is created lazily from the render path, so only the process
         // that actually presents the game gets one. Early logs buffer until then.
         LOG("Trinity v%s initializing (built %s %s).", TRINITY_VERSION, __DATE__, __TIME__);
+        LOG("Trinity provenance: maintainer=%s source=%s upstream=%s.",
+            TRINITY_MAINTAINER, TRINITY_SOURCE_URL, TRINITY_UPSTREAM_URL);
+        LOG("Trinity lineage: %s", provenance::kBinaryMarker);
 
         // Restore last session's feature settings (Trinity.ini) before the
         // feature hooks install, so restored toggles apply from frame one.
